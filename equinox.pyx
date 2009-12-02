@@ -130,15 +130,7 @@ cdef class Node:
                 raise ValueError
             cdef Element parent = self._parent
             cdef Node old_sib = self._prev_sib
-            new_sib.unlink()
-            new_sib._parent = parent
-            new_sib._prev_sib = old_sib
-            new_sib._next_sib = self
-            if old_sib:
-                old_sib._next_sib = new_sib
-            elif parent:
-                parent._first_child = new_sib
-            self._prev_sib = new_sib
+            new_sib._link(parent, old_sib, self)
 
     property next_sib:
         def __get__(self):
@@ -149,15 +141,24 @@ cdef class Node:
                 raise ValueError
             cdef Element parent = self._parent
             cdef Node old_sib = self._next_sib
-            new_sib.unlink()
-            new_sib._parent = parent
-            new_sib._prev_sib = self
-            new_sib._next_sib = old_sib
-            if old_sib:
-                old_sib._prev_sib = new_sib
-            self._next_sib = new_sib
+            new_sib._link(parent, self, old_sib)
 
     # Mutators
+    cdef _link(self, Element parent, Node prev_sib, Node next_sib):
+        assert(parent)
+        self.unlink()
+        self._parent = parent
+        self._prev_sib = prev_sib
+        self._next_sib = next_sib
+        if prev_sib:
+            prev_sib._next_sib = self
+        else:
+            parent._first_child = self
+        if next_sib:
+            next_sib._prev_sib = self
+        else:
+            parent._last_child = self
+
     cpdef replaceWith(Node self, Node replacement):
         self.prev_sib = replacement
         self.unlink()
@@ -168,14 +169,14 @@ cdef class Node:
         cdef Node next_sib = self._next_sib
         if prev_sib:
             prev_sib._next_sib = next_sib
-            if next_sib:
-                next_sib._prev_sib = prev_sib
-        else:
-            if parent:
-                assert(parent._first_child == self)
-                parent._first_child = next_sib
-            if next_sib:
-                next_sib._prev_sib = None
+        elif parent:
+            assert(parent._first_child == self)
+            parent._first_child = next_sib
+        if next_sib:
+            next_sib._prev_sib = prev_sib
+        elif parent:
+            assert(parent._last_child == self)
+            parent._last_child = prev_sib
         self._parent = None
         self._prev_sib = None
         self._next_sib = None
@@ -217,6 +218,7 @@ cdef class Element(Node):
     cdef unicode _name
     cdef dict _attrs
     cdef Node _first_child
+    cdef Node _last_child
 
     def __cinit__(self, name, dict attrs=None, list children=None,
                   *args, **kwargs):
@@ -229,16 +231,18 @@ cdef class Element(Node):
                 self._attrs[k] = v
         cdef Node prev_sib
         if children:
-            ichildren = iter(children)
-            prev_sib = ichildren.next()
-            prev_sib._parent = self
-            self._first_child = prev_sib
-            for child in ichildren:
+            iter_children = iter(children)
+            prev_sib = iter_children.next()
+            self.first_child = prev_sib
+            for child in iter_children:
                 prev_sib.next_sib = child
                 prev_sib = child
 
+    def __repr__(self):
+        return '<Element "%s" at 0x%x>' % (self.name, id(self))
+
     def __unicode__(self):
-        result = [c.text for c in self._children if c.name is None]
+        result = [c.text for c in self if c.name is None]
         return u''.join(result)
 
     # Properties
@@ -250,6 +254,34 @@ cdef class Element(Node):
             if not name:
                 raise ValueError("Invalid element name")
             self._name = unicode(name)
+
+    property first_child:
+        def __get__(self):
+            return self._first_child
+
+        def __set__(self, Node child):
+            if not child:
+                raise ValueError
+            first_child = self._first_child
+            if first_child:
+                first_child.prev_sib = child
+            else:
+                assert(not self._last_child)
+                child._link(self, None, None)
+
+    property last_child:
+        def __get__(self):
+            return self._last_child
+
+        def __set__(self, Node child):
+            if not child:
+                raise ValueError
+            last_child = self._last_child
+            if last_child:
+                last_child.next_sib = child
+            else:
+                assert(not self._first_child)
+                child._link(self, None, None)
 
     # Attributes
     def __contains__(self, k):
