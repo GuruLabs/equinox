@@ -233,19 +233,19 @@ cdef class Element(Node):
         if children:
             iter_children = iter(children)
             prev_sib = iter_children.next()
-            self.first_child = prev_sib
+            self.prependChild(prev_sib)
             for child in iter_children:
                 prev_sib.next_sib = child
                 prev_sib = child
 
     def __repr__(self):
-        return '<Element "%s" at 0x%x>' % (self.name, id(self))
+        return "<Element '%s' at 0x%x>" % (self.name, id(self))
 
     def __unicode__(self):
         result = [c.text for c in self if c.name is None]
         return u''.join(result)
 
-    # Properties
+    # Name
     property name:
         def __get__(self):
             return self._name
@@ -254,34 +254,6 @@ cdef class Element(Node):
             if not name:
                 raise ValueError("Invalid element name")
             self._name = unicode(name)
-
-    property first_child:
-        def __get__(self):
-            return self._first_child
-
-        def __set__(self, Node child):
-            if not child:
-                raise ValueError
-            first_child = self._first_child
-            if first_child:
-                first_child.prev_sib = child
-            else:
-                assert(not self._last_child)
-                child._link(self, None, None)
-
-    property last_child:
-        def __get__(self):
-            return self._last_child
-
-        def __set__(self, Node child):
-            if not child:
-                raise ValueError
-            last_child = self._last_child
-            if last_child:
-                last_child.next_sib = child
-            else:
-                assert(not self._first_child)
-                child._link(self, None, None)
 
     # Attributes
     def __contains__(self, k):
@@ -302,12 +274,48 @@ cdef class Element(Node):
     def has_key(self, k):
         return self._attrs.has_key(k)
 
-    def iteritems(self):
+    def attrs(self):
+        return self._attrs.items()
+
+    items = attrs
+
+    def iterattrs(self):
         return self._attrs.iteritems()
+
+    iteritems = iterattrs
 
     # Children
     def __iter__(self):
         return NodeIterator(self._first_child)
+
+    property first_child:
+        def __get__(self):
+            return self._first_child
+
+    property last_child:
+        def __get__(self):
+            return self._last_child
+
+    # Methods
+    def prependChild(self, Node child):
+        if not child:
+            raise ValueError
+        first_child = self._first_child
+        if first_child:
+            first_child.prev_sib = child
+        else:
+            assert(not self._last_child)
+            child._link(self, None, None)
+
+    def appendChild(self, Node child):
+        if not child:
+            raise ValueError
+        last_child = self._last_child
+        if last_child:
+            last_child.next_sib = child
+        else:
+            assert(not self._first_child)
+            child._link(self, None, None)
 
     def first(self, name):
         pass
