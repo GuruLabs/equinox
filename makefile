@@ -1,3 +1,7 @@
+test: equinox.so tests/*.py
+	export PYTHONPATH="${PWD}:${PYTHONPATH}" ; \
+		for I in tests/*.py; do python $${I}; done
+
 equinox.so: equinox.o
 	gcc -shared $< -o $@ `pkg-config --libs libxml-2.0`
 

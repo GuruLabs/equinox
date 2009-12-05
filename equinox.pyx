@@ -2,6 +2,42 @@
 # vim: set sw=4 ts=8 sts=4 expandtab autoindent :
 # -*- tab-width 8 ; indent-tabs-mode: nil -*-
 
+"""
+A simplified interface to XML and other structured documents
+
+>>> from equinox import Element, Text
+>>> root = Element('foo',
+...                attrs={'bar': 'baz',
+...                       'qux': 'quux',
+...                      },
+...                children=[Element('corge'),
+...                          Text('grault'),
+...                          Element('garply'),
+...                         ])
+>>> root
+<Element 'foo' at 0x...>
+>>> root.name
+u'foo'
+>>> root['bar']
+u'baz'
+>>> root['qux']
+u'quux'
+>>> root.get('qux')
+u'quux'
+>>> root.get('quux')
+>>> for child in root:
+...     print repr(child)
+<Element 'corge' at 0x...>
+<Text u'grault'>
+<Element 'garply' at 0x...>
+>>> root.first_child
+<Element 'corge' at 0x...>
+>>> root.first_child.next_sib
+<Text u'grault'>
+>>> root.last_child
+<Element 'garply' at 0x...>
+"""
+
 # TODO Raise exceptions on libxml2 errors
 
 from python cimport PyString_Check, PyUnicode_Check, PyInt_Check
@@ -162,6 +198,29 @@ cdef class Node:
             parent._last_child = self
 
     cpdef prepend(self, node):
+        """
+        TODO
+
+        >>> from equinox import Element, Text
+        >>> node = Element('qux')
+        >>> node.prev_sib
+        >>> node.prepend('baz')
+        Traceback (most recent call last):
+          ...
+        StructureError: ...
+        >>> root = Element('rfc3092', children=[node])
+        >>> node.prepend('foo')
+        >>> node.prev_sib
+        <Text u'foo'>
+        >>> node.prepend(Element('bar'))
+        >>> node.prepend(Text('baz'))
+        >>> for child in root:
+        ...     print child
+        <Text u'foo'>
+        <Element 'bar' at 0x...>
+        <Text u'baz'>
+        <Element 'qux' at 0x...>
+        """
         cdef Node new_sib = object_as_node(node)
         cdef Node old_sib = self._prev_sib
         cdef Element parent = self._parent
@@ -170,6 +229,29 @@ cdef class Node:
         new_sib._link(parent, old_sib, self)
 
     cpdef append(self, node):
+        """
+        TODO
+
+        >>> from equinox import Element, Text
+        >>> node = Element('foo')
+        >>> node.next_sib
+        >>> node.append('qux')
+        Traceback (most recent call last):
+          ...
+        StructureError: ...
+        >>> root = Element('rfc3092', children=[node])
+        >>> node.append('qux')
+        >>> node.next_sib
+        <Text u'qux'>
+        >>> node.append(Element('baz'))
+        >>> node.append(Text('bar'))
+        >>> for child in root:
+        ...     print child
+        <Element 'foo' at 0x...>
+        <Text u'bar'>
+        <Element 'baz' at 0x...>
+        <Text u'qux'>
+        """
         cdef Node new_sib = object_as_node(node)
         cdef Node old_sib = self._next_sib
         cdef Element parent = self._parent
@@ -316,6 +398,23 @@ cdef class Element(Node):
 
     # Methods
     cpdef prependChild(self, node):
+        """
+        TODO
+
+        >>> from equinox import Element
+        >>> root = Element('rfc3092')
+        >>> root.first_child
+        >>> root.prependChild(Element('baz'))
+        >>> root.first_child
+        <Element 'baz' at 0x...>
+        >>> root.prependChild(Element('bar'))
+        >>> root.prependChild(Element('foo'))
+        >>> for child in root:
+        ...     print child
+        <Element 'foo' at 0x...>
+        <Element 'bar' at 0x...>
+        <Element 'baz' at 0x...>
+        """
         cdef Node child = object_as_node(node)
         first_child = self._first_child
         if first_child:
@@ -325,6 +424,23 @@ cdef class Element(Node):
             child._link(self, None, None)
 
     cpdef appendChild(self, node):
+        """
+        TODO
+
+        >>> from equinox import Element
+        >>> root = Element('rfc3092')
+        >>> root.last_child
+        >>> root.appendChild(Element('foo'))
+        >>> root.last_child
+        <Element 'foo' at 0x...>
+        >>> root.appendChild(Element('bar'))
+        >>> root.appendChild(Element('baz'))
+        >>> for child in root:
+        ...     print child
+        <Element 'foo' at 0x...>
+        <Element 'bar' at 0x...>
+        <Element 'baz' at 0x...>
+        """
         cdef Node child = object_as_node(node)
         last_child = self._last_child
         if last_child:
@@ -334,6 +450,21 @@ cdef class Element(Node):
             child._link(self, None, None)
 
     cpdef Element first(self, name):
+        """
+        TODO
+
+        >>> root = Element('rfc3092', children=[
+        ...                Element('foo', {'bar': 'baz'}),
+        ...                Element('foo', {'qux': 'quux'}),
+        ...        ])
+        >>> child = root.first('foo')
+        >>> child['bar']
+        u'baz'
+        >>> child['qux']
+        Traceback (most recent call last):
+          ...
+        KeyError: 'qux'
+        """
         cdef Node child = self._first_child
         name = unicode(name)
         while child:
@@ -344,6 +475,21 @@ cdef class Element(Node):
         return None
 
     cpdef Element last(self, name):
+        """
+        TODO
+
+        >>> root = Element('rfc3092', children=[
+        ...                Element('foo', {'bar': 'baz'}),
+        ...                Element('foo', {'qux': 'quux'}),
+        ...        ])
+        >>> child = root.last('foo')
+        >>> child['bar']
+        Traceback (most recent call last):
+          ...
+        KeyError: 'bar'
+        >>> child['qux']
+        u'quux'
+        """
         cdef Node child = self._last_child
         name = unicode(name)
         while child:
