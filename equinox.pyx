@@ -103,9 +103,25 @@ cdef str unicode_to_utf8(s):
 #--------------------------------------
 # Classes
 #--------------------------------------
+
 cdef class Node
 cdef class Element(Node)
 cdef class Text(Node)
+
+cdef Node object_as_node(object obj):
+    cdef Node node
+    if not obj:
+        raise ValueError
+    elif isinstance(obj, Node):
+        node = obj
+    elif isinstance(obj, str) or isinstance(obj, unicode):
+        node = Text(obj)
+    else:
+        raise ValueError
+    return node
+
+class StructureError(Exception):
+    pass
 
 cdef class Node:
     cdef Element _parent
@@ -125,23 +141,9 @@ cdef class Node:
         def __get__(self):
             return self._prev_sib
 
-        def __set__(self, Node new_sib):
-            if not new_sib:
-                raise ValueError
-            cdef Element parent = self._parent
-            cdef Node old_sib = self._prev_sib
-            new_sib._link(parent, old_sib, self)
-
     property next_sib:
         def __get__(self):
             return self._next_sib
-
-        def __set__(self, Node new_sib):
-            if not new_sib:
-                raise ValueError
-            cdef Element parent = self._parent
-            cdef Node old_sib = self._next_sib
-            new_sib._link(parent, self, old_sib)
 
     # Mutators
     cdef _link(self, Element parent, Node prev_sib, Node next_sib):
@@ -159,10 +161,26 @@ cdef class Node:
         else:
             parent._last_child = self
 
+    cpdef prepend(self, node):
+        cdef Node new_sib = object_as_node(node)
+        cdef Node old_sib = self._prev_sib
+        cdef Element parent = self._parent
+        if not parent:
+            raise StructureError("Node parent required")
+        new_sib._link(parent, old_sib, self)
+
+    cpdef append(self, node):
+        cdef Node new_sib = object_as_node(node)
+        cdef Node old_sib = self._next_sib
+        cdef Element parent = self._parent
+        if not parent:
+            raise StructureError("Node parent required")
+        new_sib._link(parent, self, old_sib)
+
     cpdef replaceWith(Node self, Node replacement):
-        self.prev_sib = replacement
+        self.prepend(replacement)
         self.unlink()
-            
+
     cpdef unlink(Node self):
         cdef Element parent = self._parent
         cdef Node prev_sib = self._prev_sib
@@ -235,7 +253,7 @@ cdef class Element(Node):
             prev_sib = iter_children.next()
             self.prependChild(prev_sib)
             for child in iter_children:
-                prev_sib.next_sib = child
+                prev_sib.append(child)
                 prev_sib = child
 
     def __repr__(self):
@@ -297,22 +315,20 @@ cdef class Element(Node):
             return self._last_child
 
     # Methods
-    def prependChild(self, Node child):
-        if not child:
-            raise ValueError
+    cpdef prependChild(self, node):
+        cdef Node child = object_as_node(node)
         first_child = self._first_child
         if first_child:
-            first_child.prev_sib = child
+            first_child.prepend(child)
         else:
             assert(not self._last_child)
             child._link(self, None, None)
 
-    def appendChild(self, Node child):
-        if not child:
-            raise ValueError
+    cpdef appendChild(self, node):
+        cdef Node child = object_as_node(node)
         last_child = self._last_child
         if last_child:
-            last_child.next_sib = child
+            last_child.append(child)
         else:
             assert(not self._first_child)
             child._link(self, None, None)
