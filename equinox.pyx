@@ -219,7 +219,7 @@ cdef class Text(Node):
         self._text = unicode(text)
 
     def __repr__(self):
-        return repr(self._text)
+        return '<Text %s>' % repr(self._text)
 
     def __unicode__(self):
         return self._text
