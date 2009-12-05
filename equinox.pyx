@@ -317,8 +317,25 @@ cdef class Element(Node):
             assert(not self._first_child)
             child._link(self, None, None)
 
-    def first(self, name):
-        pass
+    cpdef Element first(self, name):
+        cdef Node child = self._first_child
+        name = unicode(name)
+        while child:
+            if child.name == name:
+                return child
+            else:
+                child = child._next_sib
+        return None
+
+    cpdef Element last(self, name):
+        cdef Node child = self._last_child
+        name = unicode(name)
+        while child:
+            if child.name == name:
+                return child
+            else:
+                child = child._prev_sib
+        return None
 
     def all(self, name):
         pass
