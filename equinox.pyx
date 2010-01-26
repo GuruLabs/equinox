@@ -341,11 +341,19 @@ cdef class Element(Node):
     def __repr__(self):
         return "<Element '%s' at 0x%x>" % (self.name, id(self))
 
-    def __unicode__(self):
-        result = [c.text for c in self if c.name is None]
-        return u''.join(result)
+    def _text_leaves(self):
+        result = []
+        for child in self:
+            if child.name is None:
+                result.append(child.text)
+            else:
+                result.extend(child._text_leaves())
+        return result
 
-    # Name
+    def __unicode__(self):
+        return u''.join(self._text_leaves())
+
+    # Properties
     property name:
         def __get__(self):
             return self._name
@@ -354,6 +362,22 @@ cdef class Element(Node):
             if not name:
                 raise ValueError("Invalid element name")
             self._name = unicode(name)
+
+    property text:
+        """
+        TODO
+
+        >>> from equinox import Element, Text
+        >>> e = Element('rfc3092', children=[
+        ...          Element('metasyntactic variable', children=[Text('foo')]),
+        ...          Text(' '),
+        ...          Element('metasyntactic variable', children=[Text('bar')])
+        ...     ])
+        >>> e.text
+        u'foo bar'
+        """
+        def __get__(self):
+            return unicode(self)
 
     # Attributes
     def __contains__(self, k):
@@ -499,8 +523,27 @@ cdef class Element(Node):
                 child = child._prev_sib
         return None
 
-    def all(self, name):
-        pass
+    cpdef list all(self, name):
+        """
+        TODO
+
+        >>> root = Element('rfc3092', children=[
+        ...                Element('foo', {'bar': 'baz'}),
+        ...                Element('foo', {'qux': 'quux'}),
+        ...        ])
+        >>> root.all('foo')
+        [<Element 'foo' at 0x...>, <Element 'foo' at 0x...>]
+        >>> root.all('corge')
+        []
+        """
+        cdef Node child = self._first_child
+        cdef list result = []
+        name = unicode(name)
+        while child:
+            if child.name == name:
+                result.append(child)
+            child = child._next_sib
+        return result
 
 #--------------------------------------
 # Reader
