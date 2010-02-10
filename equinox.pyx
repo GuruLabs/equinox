@@ -139,7 +139,6 @@ cdef str unicode_to_utf8(s):
 #--------------------------------------
 # Classes
 #--------------------------------------
-
 cdef class Node
 cdef class Element(Node)
 cdef class Text(Node)
@@ -197,23 +196,23 @@ cdef class Node:
         else:
             parent._last_child = self
 
-    cpdef prepend(self, node):
+    cpdef prepend_sibling(self, node):
         """
-        TODO
+        prepend_sibling(self, node)
 
         >>> from equinox import Element, Text
         >>> node = Element('qux')
         >>> node.prev_sib
-        >>> node.prepend('baz')
+        >>> node.prepend_sibling('baz')
         Traceback (most recent call last):
           ...
         StructureError: ...
         >>> root = Element('rfc3092', children=[node])
-        >>> node.prepend('foo')
+        >>> node.prepend_sibling('foo')
         >>> node.prev_sib
         <Text u'foo'>
-        >>> node.prepend(Element('bar'))
-        >>> node.prepend(Text('baz'))
+        >>> node.prepend_sibling(Element('bar'))
+        >>> node.prepend_sibling(Text('baz'))
         >>> for child in root:
         ...     print child
         <Text u'foo'>
@@ -228,23 +227,23 @@ cdef class Node:
             raise StructureError("Node parent required")
         new_sib._link(parent, old_sib, self)
 
-    cpdef append(self, node):
+    cpdef append_sibling(self, node):
         """
-        TODO
+        append_sibling(self, node)
 
         >>> from equinox import Element, Text
         >>> node = Element('foo')
         >>> node.next_sib
-        >>> node.append('qux')
+        >>> node.append_sibling('qux')
         Traceback (most recent call last):
           ...
         StructureError: ...
         >>> root = Element('rfc3092', children=[node])
-        >>> node.append('qux')
+        >>> node.append_sibling('qux')
         >>> node.next_sib
         <Text u'qux'>
-        >>> node.append(Element('baz'))
-        >>> node.append(Text('bar'))
+        >>> node.append_sibling(Element('baz'))
+        >>> node.append_sibling(Text('bar'))
         >>> for child in root:
         ...     print child
         <Element 'foo' at 0x...>
@@ -259,11 +258,37 @@ cdef class Node:
             raise StructureError("Node parent required")
         new_sib._link(parent, self, old_sib)
 
-    cpdef replaceWith(Node self, Node replacement):
-        self.prepend(replacement)
+    cpdef substitute(Node self, Node replacement):
+        """
+        substitute(self, replacement)
+
+        >>> from equinox import Element, Text
+        >>> parent = Element('foo')
+        >>> child = Element('bar')
+        >>> parent.prepend(child)
+        >>> print parent.first_child
+        <Element 'bar' at 0x...>
+        >>> child.substitute(Element('baz'))
+        >>> print parent.first_child
+        <Element 'baz' at 0x...>
+        """
+        self.prepend_sibling(replacement)
         self.unlink()
 
     cpdef unlink(Node self):
+        """
+        unlink(self)
+
+        >>> from equinox import Element, Text
+        >>> parent = Element('foo')
+        >>> child = Element('bar')
+        >>> parent.prepend(child)
+        >>> print parent.first_child
+        <Element 'bar' at 0x...>
+        >>> child.unlink()
+        >>> print parent.first_child
+        None
+        """
         cdef Element parent = self._parent
         cdef Node prev_sib = self._prev_sib
         cdef Node next_sib = self._next_sib
@@ -333,16 +358,16 @@ cdef class Element(Node):
         if children:
             iter_children = iter(children)
             prev_sib = iter_children.next()
-            self.prependChild(prev_sib)
+            self.prepend(prev_sib)
             for child in iter_children:
-                prev_sib.append(child)
+                prev_sib.append_sibling(child)
                 prev_sib = child
 
     def __repr__(self):
         return "<Element '%s' at 0x%x>" % (self.name, id(self))
 
-    def _text_leaves(self):
-        result = []
+    cdef list _text_leaves(self):
+        cdef list result = []
         for child in self:
             if child.name is None:
                 result.append(child.text)
@@ -369,9 +394,9 @@ cdef class Element(Node):
 
         >>> from equinox import Element, Text
         >>> e = Element('rfc3092', children=[
-        ...          Element('metasyntactic variable', children=[Text('foo')]),
+        ...          Element('metasyntactic-variable', children=[Text('foo')]),
         ...          Text(' '),
-        ...          Element('metasyntactic variable', children=[Text('bar')])
+        ...          Element('metasyntactic-variable', children=[Text('bar')])
         ...     ])
         >>> e.text
         u'foo bar'
@@ -421,18 +446,18 @@ cdef class Element(Node):
             return self._last_child
 
     # Methods
-    cpdef prependChild(self, node):
+    cpdef prepend(self, node):
         """
-        TODO
+        prepend(self, node)
 
         >>> from equinox import Element
         >>> root = Element('rfc3092')
         >>> root.first_child
-        >>> root.prependChild(Element('baz'))
+        >>> root.prepend(Element('baz'))
         >>> root.first_child
         <Element 'baz' at 0x...>
-        >>> root.prependChild(Element('bar'))
-        >>> root.prependChild(Element('foo'))
+        >>> root.prepend(Element('bar'))
+        >>> root.prepend(Element('foo'))
         >>> for child in root:
         ...     print child
         <Element 'foo' at 0x...>
@@ -442,23 +467,23 @@ cdef class Element(Node):
         cdef Node child = object_as_node(node)
         first_child = self._first_child
         if first_child:
-            first_child.prepend(child)
+            first_child.prepend_sibling(child)
         else:
             assert(not self._last_child)
             child._link(self, None, None)
 
-    cpdef appendChild(self, node):
+    cpdef append(self, node):
         """
-        TODO
+        append(self, node)
 
         >>> from equinox import Element
         >>> root = Element('rfc3092')
         >>> root.last_child
-        >>> root.appendChild(Element('foo'))
+        >>> root.append(Element('foo'))
         >>> root.last_child
         <Element 'foo' at 0x...>
-        >>> root.appendChild(Element('bar'))
-        >>> root.appendChild(Element('baz'))
+        >>> root.append(Element('bar'))
+        >>> root.append(Element('baz'))
         >>> for child in root:
         ...     print child
         <Element 'foo' at 0x...>
@@ -468,14 +493,14 @@ cdef class Element(Node):
         cdef Node child = object_as_node(node)
         last_child = self._last_child
         if last_child:
-            last_child.append(child)
+            last_child.append_sibling(child)
         else:
             assert(not self._first_child)
             child._link(self, None, None)
 
     cpdef Element first(self, name):
         """
-        TODO
+        first(self, name)
 
         >>> root = Element('rfc3092', children=[
         ...                Element('foo', {'bar': 'baz'}),
@@ -500,7 +525,7 @@ cdef class Element(Node):
 
     cpdef Element last(self, name):
         """
-        TODO
+        last(self, name)
 
         >>> root = Element('rfc3092', children=[
         ...                Element('foo', {'bar': 'baz'}),
@@ -525,7 +550,7 @@ cdef class Element(Node):
 
     cpdef list all(self, name):
         """
-        TODO
+        all(self, name)
 
         >>> root = Element('rfc3092', children=[
         ...                Element('foo', {'bar': 'baz'}),
@@ -546,7 +571,7 @@ cdef class Element(Node):
         return result
 
 #--------------------------------------
-# Reader
+# XML Reader
 #--------------------------------------
 ctypedef enum nodeTypes:
     TYPE_ELEMENT = 1
@@ -632,7 +657,7 @@ cdef Element _xmlReadTree(xmlTextReaderPtr c_reader, ignore_whitespace):
 
     return Element(name, attrs, children)
 
-cpdef Element readXML(filename, ignore_whitespace=False):
+cpdef Element read_xml(filename, ignore_whitespace=False):
     if not filename:
         raise RuntimeError("Invalid filename")
 
@@ -655,7 +680,7 @@ cpdef Element readXML(filename, ignore_whitespace=False):
     return tree
 
 #--------------------------------------
-# Writer
+# XML Writer
 #--------------------------------------
 cdef _xmlWriteAttribute(xmlTextWriterPtr c_writer, name, value):
     py_name = unicode_to_utf8(name)
@@ -682,7 +707,7 @@ cdef _xmlWriteElement(xmlTextWriterPtr c_writer, element):
             _xmlWriteText(c_writer, child)
     xmlTextWriterEndElement(c_writer)
 
-cpdef writeXML(filename, tree):
+cpdef write_xml(filename, tree):
     if not filename:
         raise RuntimeError("Invalid filename")
 
