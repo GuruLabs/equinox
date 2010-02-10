@@ -163,6 +163,12 @@ cdef class Node:
     cdef Node _prev_sib
     cdef Node _next_sib
 
+    cpdef Node __copy__(self):
+        raise NotImplemented
+
+    def __deepcopy__(self, memo):
+        raise NotImplemented
+
     # Properties
     property name:
         def __get__(self):
@@ -180,7 +186,10 @@ cdef class Node:
         def __get__(self):
             return self._next_sib
 
-    # Mutators
+    # Methods
+    def copy(self):
+        return self.__copy__()
+
     cdef _link(self, Element parent, Node prev_sib, Node next_sib):
         assert(parent)
         self.unlink()
@@ -331,6 +340,12 @@ cdef class Text(Node):
     def __unicode__(self):
         return self._text
 
+    cpdef Node __copy__(self):
+        return Text(self._text)
+
+    def __deepcopy__(self, memo):
+        return self.__copy__()
+
     # Properties
     property text:
         def __get__(self):
@@ -362,6 +377,26 @@ cdef class Element(Node):
             for child in iter_children:
                 prev_sib.append_sibling(child)
                 prev_sib = child
+
+    cpdef Node __copy__(self):
+        cdef Element copy = Element(self._name)
+        copy._attrs = self._attrs.copy()
+        cdef Node prev_sib
+        cdef Node next_sib
+        cdef Node child = self._first_child
+        if child is not None:
+            prev_sib = child.__copy__()
+            copy.prepend(prev_sib)
+            child = child._next_sib
+            while child is not None:
+                next_sib = child.__copy__()
+                prev_sib.append_sibling(next_sib)
+                prev_sib = next_sib
+                child = child._next_sib
+        return copy
+
+    def __deepcopy__(self, memo):
+        return self.__copy__()
 
     def __repr__(self):
         return "<Element '%s' at 0x%x>" % (self.name, id(self))
