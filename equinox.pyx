@@ -2,6 +2,9 @@
 # vim: set sw=4 ts=8 sts=4 expandtab autoindent :
 # -*- tab-width 8 ; indent-tabs-mode: nil -*-
 
+__all__ = ('engine', 'read_xml', 'write_xml',
+           'Element', 'Text', 'StructureError')
+
 """
 A simplified interface to XML and other structured documents
 
@@ -117,6 +120,25 @@ cdef extern from "libxml/xmlwriter.h":
                                  xmlChar *content)
 
 #--------------------------------------
+# Forward Declarations
+#--------------------------------------
+# Tree
+cdef class Node
+cdef class Element(Node)
+cdef class Text(Node)
+# Iterators
+cdef class NodeIterator
+cdef class ElementIterator
+cdef class TextIterator
+# Selectors
+cdef class SelectorEngine
+
+#--------------------------------------
+# Globals
+#--------------------------------------
+engine = SelectorEngine()
+
+#--------------------------------------
 # Helpers
 #--------------------------------------
 cdef unicode utf8_to_unicode(char* s):
@@ -128,20 +150,11 @@ cdef unicode utf8_to_unicode(char* s):
 # the caller to create a char* and keep it valid.
 cdef str unicode_to_utf8(s):
     cdef str byte_string
-    if isinstance(s, str):
-        byte_string = s
-    elif isinstance(s, str):
+    if isinstance(s, unicode):
         byte_string = s.encode(u'UTF-8')
     else:
         byte_string = unicode(s).encode(u'UTF-8')
     return byte_string
-
-#--------------------------------------
-# Classes
-#--------------------------------------
-cdef class Node
-cdef class Element(Node)
-cdef class Text(Node)
 
 cdef Node object_as_node(object obj):
     cdef Node node
@@ -155,9 +168,9 @@ cdef Node object_as_node(object obj):
         raise ValueError
     return node
 
-class StructureError(Exception):
-    pass
-
+#--------------------------------------
+# Classes
+#--------------------------------------
 cdef class Node:
     cdef Element _parent
     cdef Node _prev_sib
@@ -315,19 +328,6 @@ cdef class Node:
         self._prev_sib = None
         self._next_sib = None
 
-cdef class NodeIterator:
-    cdef Node _next_node
-
-    def __cinit__(self, Node start_node):
-        self._next_node = start_node
-
-    def __next__(self):
-        cdef Node node = self._next_node
-        if node is None:
-            raise StopIteration
-        self._next_node = node._next_sib
-        return node
-
 cdef class Text(Node):
     cdef unicode _text
 
@@ -367,7 +367,6 @@ cdef class Element(Node):
         if attrs is not None:
             for k, v in attrs.iteritems():
                 k = unicode(k)
-                v = unicode(v)
                 self._attrs[k] = v
         cdef Node prev_sib
         if children:
@@ -403,11 +402,17 @@ cdef class Element(Node):
 
     cdef list _text_leaves(self):
         cdef list result = []
-        for child in self:
+        cdef Text tmp_t
+        cdef Element tmp_e
+        cdef Node child = self._first_child
+        while child is not None:
             if child.name is None:
-                result.append(child.text)
+                tmp_t = child
+                result.append(tmp_t._text)
             else:
-                result.extend(child._text_leaves())
+                tmp_e = child
+                result.extend(tmp_e._text_leaves())
+            child = child._next_sib
         return result
 
     def __unicode__(self):
@@ -441,22 +446,32 @@ cdef class Element(Node):
 
     # Attributes
     def __contains__(self, k):
+        k = unicode(k)
         return self._attrs.__contains__(k)
 
     def __delitem__(self, k):
+        k = unicode(k)
         self._attrs.__delitem__(k)
 
     def __getitem__(self, k):
+        k = unicode(k)
         return self._attrs.__getitem__(k)
 
     def __setitem__(self, k, v):
+        k = unicode(k)
         self._attrs.__setitem__(k, v)
 
-    def get(self, k, default=None):
+    def getattr(self, k, default=None):
+        k = unicode(k)
         return self._attrs.get(k, default)
 
-    def has_key(self, k):
+    get = getattr
+
+    def has_attr(self, k):
+        k = unicode(k)
         return self._attrs.has_key(k)
+
+    has_key = has_attr
 
     def attrs(self):
         return self._attrs.items()
@@ -470,7 +485,16 @@ cdef class Element(Node):
 
     # Children
     def __iter__(self):
-        return NodeIterator(self._first_child)
+        return NodeIterator(self)
+
+    def iter(self, reversed=False):
+        return NodeIterator(self, reversed)
+
+    def iterelements(self, reversed=False):
+        return ElementIterator(self, reversed)
+
+    def itertexts(self, reversed=False):
+        return TextIterator(self, reversed)
 
     property first_child:
         def __get__(self):
@@ -485,19 +509,23 @@ cdef class Element(Node):
         """
         prepend(self, node)
 
-        >>> from equinox import Element
+        >>> from equinox import Element, Text
         >>> root = Element('rfc3092')
         >>> root.first_child
-        >>> root.prepend(Element('baz'))
+        >>> root.prepend(Text('baz'))
         >>> root.first_child
-        <Element 'baz' at 0x...>
-        >>> root.prepend(Element('bar'))
-        >>> root.prepend(Element('foo'))
+        <Text u'baz'>
+        >>> root.prepend(Element('br'))
+        >>> root.prepend(u'bar')
+        >>> root.prepend(Element('br'))
+        >>> root.prepend('foo')
         >>> for child in root:
         ...     print child
-        <Element 'foo' at 0x...>
-        <Element 'bar' at 0x...>
-        <Element 'baz' at 0x...>
+        <Text u'foo'>
+        <Element 'br' at 0x...>
+        <Text u'bar'>
+        <Element 'br' at 0x...>
+        <Text u'baz'>
         """
         cdef Node child = object_as_node(node)
         first_child = self._first_child
@@ -511,19 +539,23 @@ cdef class Element(Node):
         """
         append(self, node)
 
-        >>> from equinox import Element
+        >>> from equinox import Element, Text
         >>> root = Element('rfc3092')
         >>> root.last_child
-        >>> root.append(Element('foo'))
+        >>> root.append(Text('foo'))
         >>> root.last_child
-        <Element 'foo' at 0x...>
-        >>> root.append(Element('bar'))
-        >>> root.append(Element('baz'))
+        <Text u'foo'>
+        >>> root.append(Element('br'))
+        >>> root.append(u'bar')
+        >>> root.append(Element('br'))
+        >>> root.append(u'baz')
         >>> for child in root:
         ...     print child
-        <Element 'foo' at 0x...>
-        <Element 'bar' at 0x...>
-        <Element 'baz' at 0x...>
+        <Text u'foo'>
+        <Element 'br' at 0x...>
+        <Text u'bar'>
+        <Element 'br' at 0x...>
+        <Text u'baz'>
         """
         cdef Node child = object_as_node(node)
         last_child = self._last_child
@@ -543,20 +575,13 @@ cdef class Element(Node):
         ...        ])
         >>> child = root.first('foo')
         >>> child['bar']
-        u'baz'
+        'baz'
         >>> child['qux']
         Traceback (most recent call last):
           ...
-        KeyError: 'qux'
+        KeyError: u'qux'
         """
-        cdef Node child = self._first_child
-        name = unicode(name)
-        while child:
-            if child.name == name:
-                return child
-            else:
-                child = child._next_sib
-        return None
+        return engine.first(name, self)
 
     cpdef Element last(self, name):
         """
@@ -570,18 +595,11 @@ cdef class Element(Node):
         >>> child['bar']
         Traceback (most recent call last):
           ...
-        KeyError: 'bar'
+        KeyError: u'bar'
         >>> child['qux']
-        u'quux'
+        'quux'
         """
-        cdef Node child = self._last_child
-        name = unicode(name)
-        while child:
-            if child.name == name:
-                return child
-            else:
-                child = child._prev_sib
-        return None
+        return engine.last(name, self)
 
     cpdef list all(self, name):
         """
@@ -596,14 +614,216 @@ cdef class Element(Node):
         >>> root.all('corge')
         []
         """
-        cdef Node child = self._first_child
-        cdef list result = []
-        name = unicode(name)
-        while child:
-            if child.name == name:
-                result.append(child)
-            child = child._next_sib
-        return result
+        return engine.all(name, self)
+
+cdef class NodeIterator:
+    cdef Node _next_node
+    cdef bool _reversed
+
+    def __cinit__(self, Element parent, bool reversed=False):
+        if reversed:
+            self._next_node = parent._last_child
+        else:
+            self._next_node = parent._first_child
+        self._reversed = reversed
+
+    def __next__(self):
+        cdef Node node = self._next_node
+        if node is None:
+            raise StopIteration
+        if self._reversed:
+            self._next_node = node._prev_sib
+        else:
+            self._next_node = node._next_sib
+        return node
+
+    def __iter__(self):
+        return self
+
+cdef class ElementIterator:
+    cdef Node _next_node
+    cdef bool _reversed
+
+    def __cinit__(self, Element parent, bool reversed=False):
+        cdef Node start_node
+        if reversed:
+            start_node = parent._last_child
+            while (start_node is not None) and (start_node.name is None):
+                start_node = start_node._prev_sib
+        else:
+            start_node = parent._first_child
+            while (start_node is not None) and (start_node.name is None):
+                start_node = start_node._next_sib
+        self._next_node = start_node
+        self._reversed = reversed
+
+    def __next__(self):
+        cdef Node next_node
+        cdef Node node = self._next_node
+        if node is None:
+            raise StopIteration
+        if self._reversed:
+            next_node = node._prev_sib
+            while (next_node is not None) and (next_node.name is None):
+                next_node = next_node._prev_sib
+        else:
+            next_node = node._next_sib
+            while (next_node is not None) and (next_node.name is None):
+                next_node = next_node._next_sib
+        self._next_node = next_node
+        return node
+
+    def __iter__(self):
+        return self
+
+cdef class TextIterator:
+    cdef Node _next_node
+    cdef bool _reversed
+
+    def __cinit__(self, Element parent, bool reversed=False):
+        cdef Node start_node
+        if reversed:
+            start_node = parent._last_child
+            while (start_node is not None) and (start_node.name is not None):
+                start_node = start_node._prev_sib
+        else:
+            start_node = parent._first_child
+            while (start_node is not None) and (start_node.name is not None):
+                start_node = start_node._next_sib
+        self._next_node = start_node
+        self._reversed = reversed
+
+    def __next__(self):
+        cdef Node next_node
+        cdef Node node = self._next_node
+        if node is None:
+            raise StopIteration
+        if self._reversed:
+            next_node = node._prev_sib
+            while (next_node is not None) and (next_node.name is not None):
+                next_node = next_node._prev_sib
+        else:
+            next_node = node._next_sib
+            while (next_node is not None) and (next_node.name is not None):
+                next_node = next_node._next_sib
+        self._next_node = next_node
+        return node
+
+    def __iter__(self):
+        return self
+
+cdef class SelectorEngine:
+    cdef dict _handlers
+
+    def __cinit__(self):
+        self._handlers = {}
+
+    def register(self, query, fn):
+        query = unicode(query)
+        self._handlers[query] = fn
+
+    cpdef Element first(self, query, Element element):
+        """
+        first(query, element)
+
+        >>> def odd(parent, reversed):
+        ...     for i, n in enumerate(parent.iter(reversed)):
+        ...         if i%2:
+        ...             yield n
+        >>> engine = SelectorEngine()
+        >>> engine.register(':odd', odd)
+        >>> root = Element('rfc3092', children=[
+        ...                Element('foo'),
+        ...                Element('bar'),
+        ...                Element('baz'),
+        ...                Element('qux'),
+        ...        ])
+        >>> engine.first(':odd', root)
+        <Element 'bar' at 0x...>
+        """
+        cdef Node child
+        query = unicode(query)
+        fn = self._handlers.get(query)
+        if fn:
+            return fn(element, False).next()
+        else:
+            child = element._first_child
+            while child:
+                if child.name == query:
+                    return child
+                else:
+                    child = child._next_sib
+            return None
+
+    cpdef Element last(self, query, Element element):
+        """
+        last(query, element)
+
+        >>> def odd(parent, reversed):
+        ...     for i, n in enumerate(parent.iter(reversed)):
+        ...         if i%2:
+        ...             yield n
+        >>> engine = SelectorEngine()
+        >>> engine.register(':odd', odd)
+        >>> root = Element('rfc3092', children=[
+        ...                Element('foo'),
+        ...                Element('bar'),
+        ...                Element('baz'),
+        ...                Element('qux'),
+        ...        ])
+        >>> engine.last(':odd', root)
+        <Element 'baz' at 0x...>
+        """
+        cdef Node child
+        query = unicode(query)
+        fn = self._handlers.get(query)
+        if fn:
+            return fn(element, True).next()
+        else:
+            child = element._last_child
+            while child:
+                if child.name == query:
+                    return child
+                else:
+                    child = child._prev_sib
+            return None
+
+    cpdef list all(self, query, Element element):
+        """
+        all(query, element)
+
+        >>> def odd(parent, reversed):
+        ...     for i, n in enumerate(parent.iter(reversed)):
+        ...         if i%2:
+        ...             yield n
+        >>> engine = SelectorEngine()
+        >>> engine.register(':odd', odd)
+        >>> root = Element('rfc3092', children=[
+        ...                Element('foo'),
+        ...                Element('bar'),
+        ...                Element('baz'),
+        ...                Element('qux'),
+        ...        ])
+        >>> engine.all(':odd', root)
+        [<Element 'bar' at 0x...>, <Element 'qux' at 0x...>]
+        """
+        cdef Node child
+        cdef list result
+        query = unicode(query)
+        fn = self._handlers.get(query)
+        if fn:
+            return list(fn(element, False))
+        else:
+            child = element._first_child
+            result = []
+            while child:
+                if child.name == query:
+                    result.append(child)
+                child = child._next_sib
+            return result
+
+class StructureError(Exception):
+    pass
 
 #--------------------------------------
 # XML Reader
@@ -720,7 +940,7 @@ cpdef Element read_xml(filename, ignore_whitespace=False):
 cdef _xmlWriteAttribute(xmlTextWriterPtr c_writer, name, value):
     py_name = unicode_to_utf8(name)
     cdef char *c_name = py_name
-    py_value = unicode_to_utf8(value)
+    py_value = unicode_to_utf8(unicode(value))
     cdef char *c_value = py_value
     xmlTextWriterWriteAttribute(c_writer, <xmlChar*>c_name, <xmlChar*>c_value)
 
@@ -729,14 +949,14 @@ cdef _xmlWriteText(xmlTextWriterPtr c_writer, text):
     cdef char *c_text = py_text
     xmlTextWriterWriteString(c_writer, <xmlChar*>c_text)
 
-cdef _xmlWriteElement(xmlTextWriterPtr c_writer, element):
+cdef _xmlWriteElement(xmlTextWriterPtr c_writer, Element element):
     py_name = unicode_to_utf8(element.name)
     cdef char *c_name = py_name
     xmlTextWriterStartElement(c_writer, <xmlChar*>c_name)
-    for name, value in element.iteritems():
+    for name, value in element.iterattrs():
         _xmlWriteAttribute(c_writer, name, value)
     for child in element:
-        if hasattr(child, 'iteritems'):
+        if hasattr(child, 'iterattrs'):
             _xmlWriteElement(c_writer, child)
         else:
             _xmlWriteText(c_writer, child)
@@ -745,6 +965,8 @@ cdef _xmlWriteElement(xmlTextWriterPtr c_writer, element):
 cpdef write_xml(filename, tree):
     if not filename:
         raise RuntimeError("Invalid filename")
+    if not isinstance(tree, Element):
+        raise TypeError("Not an equinox tree")
 
     py_filename = unicode_to_utf8(filename)
     cdef char *c_filename = py_filename
