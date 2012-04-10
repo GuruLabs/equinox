@@ -1,0 +1,13 @@
+doctest doesn't test Cython properties
+Add exclude= for all()/iteritems()
+Clearly define extension/inheritance API
+Disallow empty Element name
+Include encoding in <?xml
+Don't escape " -> &quot; in Text()
+Re-evaluate Element.attrs():
+  - iteritems = iterattrs -> iter([(k,v), ...])
+  - items     = attrs     ->      [(k,v), ...]
+  - It'd be nice have a method that returns a dict,
+    attrs() seems like the right name.
+
+http://www.shauninman.com/archive/2008/05/05/css_qualified_selectors

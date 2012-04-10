@@ -43,9 +43,10 @@ u'quux'
 
 # TODO Raise exceptions on libxml2 errors
 
-from python cimport PyString_Check, PyUnicode_Check, PyInt_Check
-from python cimport PyObject_Type, PyObject_TypeCheck
-from python_unicode cimport PyUnicode_DecodeUTF8
+from cpython cimport bool
+from cpython cimport PyString_Check, PyUnicode_Check, PyInt_Check
+from cpython cimport PyObject_Type, PyObject_TypeCheck
+from cpython.unicode cimport PyUnicode_DecodeUTF8
 
 cdef extern from "string.h":
     size_t strlen(char *s)
@@ -172,6 +173,7 @@ cdef Node object_as_node(object obj):
 # Classes
 #--------------------------------------
 cdef class Node:
+    cdef object _meta
     cdef Element _parent
     cdef Node _prev_sib
     cdef Node _next_sib
@@ -183,6 +185,22 @@ cdef class Node:
         raise NotImplemented
 
     # Properties
+    property meta:
+        def __get__(self):
+            cdef Element tmp
+            if self._meta is not None:
+                return self._meta
+            else:
+                tmp = self._parent
+                while tmp:
+                    if tmp._meta is not None:
+                        return tmp._meta
+                    tmp = tmp._parent
+            return None
+
+        def __set__(self, meta):
+            self._meta = meta
+
     property name:
         def __get__(self):
             return None
@@ -535,6 +553,9 @@ cdef class Element(Node):
             assert(not self._last_child)
             child._link(self, None, None)
 
+    # TODO prepend_element(name, attrs, children)
+    # TODO prepend_text(text)
+
     cpdef append(self, node):
         """
         append(self, node)
@@ -564,6 +585,9 @@ cdef class Element(Node):
         else:
             assert(not self._first_child)
             child._link(self, None, None)
+
+    # TODO append_element(name, attrs, children)
+    # TODO append_text(text)
 
     cpdef Element first(self, name):
         """
